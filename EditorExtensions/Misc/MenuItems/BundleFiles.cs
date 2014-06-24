@@ -30,7 +30,7 @@ namespace MadsKristensen.EditorExtensions
         public BundleFilesMenu()
         {
             // Used by the IWpfTextViewCreationListener
-            _dte = EditorExtensionsPackage.DTE;
+            _dte = WebEssentialsPackage.DTE;
         }
 
         public BundleFilesMenu(DTE2 dte, OleMenuCommandService mcs)
@@ -115,6 +115,9 @@ namespace MadsKristensen.EditorExtensions
 
                 string folder = ProjectHelpers.GetRootFolder(project);
 
+                if (string.IsNullOrEmpty(folder))
+                    continue;
+
                 BundleFilesMenu menu = new BundleFilesMenu();
 
                 foreach (string file in Directory.EnumerateFiles(folder, "*" + _ext, SearchOption.AllDirectories))
@@ -149,7 +152,13 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                BundleDocument doc = BundleDocument.FromFile(bundleFileName);
+                BundleDocument doc = await BundleDocument.FromFile(bundleFileName);
+
+                if (doc == null)
+                {
+                    Logger.Log("Note: Bundle file " + bundleFileName + " is not in Web Essentials bundle format.");
+                    return;
+                }
 
                 if (!isBuild || doc.RunOnBuild)
                     await GenerateAsync(doc, extension, true);
@@ -193,14 +202,16 @@ namespace MadsKristensen.EditorExtensions
         {
             _dte.StatusBar.Text = "Generating bundle...";
 
+            if (!hasUpdated)
+                ProjectHelpers.AddFileToActiveProject(bundle.FileName);
+
             string bundleFile = Path.Combine(Path.GetDirectoryName(bundle.FileName), Path.GetFileNameWithoutExtension(bundle.FileName));
             bool hasChanged = await BundleGenerator.MakeBundle(bundle, bundleFile, UpdateBundleAsync);
 
             if (!hasUpdated)
             {
-                ProjectHelpers.AddFileToActiveProject(bundle.FileName);
                 ProjectHelpers.AddFileToProject(bundle.FileName, bundleFile);
-                EditorExtensionsPackage.DTE.ItemOperations.OpenFile(bundle.FileName);
+                WebEssentialsPackage.DTE.ItemOperations.OpenFile(bundle.FileName);
             }
 
             if (bundle.Minified)

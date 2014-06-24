@@ -38,14 +38,17 @@ namespace MadsKristensen.EditorExtensions.Images
             ScssOutputDirectory = WESettings.Instance.Sprite.ScssOutputDirectory;
         }
 
-        public async Task WriteSpriteRecipe()
+        public async Task<XDocument> WriteSpriteRecipe()
         {
             string root = ProjectHelpers.GetRootFolder();
             XmlWriterSettings settings = new XmlWriterSettings() { Indent = true };
             XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
+            ProjectHelpers.CheckOutFileFromSourceControl(FileName);
+
             using (XmlWriter writer = await Task.Run(() => XmlWriter.Create(FileName, settings)))
             {
+                XDocument doc =
                 new XDocument(
                     new XElement("sprite",
                         new XAttribute(XNamespace.Xmlns + "xsi", xsi),
@@ -73,11 +76,20 @@ namespace MadsKristensen.EditorExtensions.Images
                         new XComment("The order of the <file> elements determines the order of the images in the sprite."),
                         new XElement("files", BundleAssets.Select(file => new XElement("file", "/" + FileHelpers.RelativePath(root, file))))
                     )
-                ).Save(writer);
+                );
+
+                doc.Save(writer);
+
+                return doc;
             }
         }
 
-        public static SpriteDocument FromFile(string fileName)
+        public async Task<IBundleDocument> LoadFromFile(string fileName)
+        {
+            return await SpriteDocument.FromFile(fileName);
+        }
+
+        public static async Task<SpriteDocument> FromFile(string fileName)
         {
             string root = ProjectHelpers.GetProjectFolder(fileName);
             string folder = Path.GetDirectoryName(root);
@@ -87,9 +99,11 @@ namespace MadsKristensen.EditorExtensions.Images
 
             XDocument doc = null;
 
+            string contents = await FileHelpers.ReadAllTextRetry(fileName);
+
             try
             {
-                doc = XDocument.Load(fileName);
+                doc = XDocument.Parse(contents);
             }
             catch (XmlException)
             {

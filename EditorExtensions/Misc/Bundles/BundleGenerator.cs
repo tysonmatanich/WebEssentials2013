@@ -53,7 +53,10 @@ namespace MadsKristensen.EditorExtensions
         {
             Dictionary<string, string> files = new Dictionary<string, string>();
 
-            await new BundleFileObserver().AttachFileObserver(document.FileName, document.FileName, updateBundle);
+            if (document == null)
+                return null;
+
+            await new BundleFileObserver().AttachFileObserver(document, document.FileName, updateBundle);
 
             foreach (string asset in document.BundleAssets)
             {
@@ -65,12 +68,12 @@ namespace MadsKristensen.EditorExtensions
                     {
                         files.Add(absolute, "/" + FileHelpers.RelativePath(ProjectHelpers.GetProjectFolder(document.FileName), asset));
 
-                        await new BundleFileObserver().AttachFileObserver(absolute, document.FileName, updateBundle);
+                        await new BundleFileObserver().AttachFileObserver(document, absolute, updateBundle);
                     }
                 }
                 else
                 {
-                    EditorExtensionsPackage.DTE.ItemOperations.OpenFile(document.FileName);
+                    WebEssentialsPackage.DTE.ItemOperations.OpenFile(document.FileName);
                     Logger.ShowMessage(String.Format(CultureInfo.CurrentCulture, "Bundle error: The file '{0}' doesn't exist", asset));
 
                     return null;

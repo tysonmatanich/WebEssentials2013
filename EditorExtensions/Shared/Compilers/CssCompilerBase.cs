@@ -3,7 +3,9 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using MadsKristensen.EditorExtensions.Autoprefixer;
 using MadsKristensen.EditorExtensions.Helpers;
+using MadsKristensen.EditorExtensions.Settings;
 using Microsoft.CSS.Core;
 using Newtonsoft.Json.Linq;
 
@@ -12,22 +14,33 @@ namespace MadsKristensen.EditorExtensions
     ///<summary>A base class for a compiler that rewrites CSS source maps.</summary>
     public abstract class CssCompilerBase : NodeExecutorBase
     {
-        private static readonly Regex _sourceMapInCss = new Regex(@"\/\*#([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*\/", RegexOptions.Multiline);
+        private static readonly Regex _sourceMapInCss = new Regex(@"\/\*#.*(?i:sourceMappingURL)([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*\/", RegexOptions.Multiline);
 
         protected async override Task<string> PostProcessResult(string resultSource, string sourceFileName, string targetFileName, string mapFileName)
         {
-            resultSource = await UpdateSourceMapUrls(resultSource, targetFileName, mapFileName);
+            string newResult = await UpdateSourceMapUrls(resultSource, targetFileName, mapFileName);
 
-            var message = ServiceName + ": " + Path.GetFileName(sourceFileName) + " compiled.";
+            string message = ServiceName + ": " + Path.GetFileName(sourceFileName) + " compiled.";
+
+            if (WESettings.Instance.Css.Autoprefix)
+            {
+                if (!ReferenceEquals(string.Intern(newResult), string.Intern(resultSource)))
+                    await FileHelpers.WriteAllTextRetry(targetFileName, newResult);
+
+                string autoprefixResult = await CssAutoprefixer.AutoprefixFile(sourceFileName, targetFileName, mapFileName);
+
+                if (autoprefixResult != null)
+                    newResult = await UpdateSourceMapUrls(autoprefixResult, targetFileName, mapFileName);
+            }
 
             // If the caller wants us to renormalize URLs to a different filename, do so.
             if (targetFileName != null && Path.GetDirectoryName(targetFileName) != Path.GetDirectoryName(sourceFileName)
-             && resultSource.IndexOf("url(", StringComparison.OrdinalIgnoreCase) > 0)
+             && newResult.IndexOf("url(", StringComparison.OrdinalIgnoreCase) > 0)
             {
                 try
                 {
-                    resultSource = CssUrlNormalizer.NormalizeUrls(
-                        tree: new CssParser().Parse(resultSource, true),
+                    newResult = CssUrlNormalizer.NormalizeUrls(
+                        tree: new CssParser().Parse(newResult, true),
                         targetFile: targetFileName,
                         oldBasePath: sourceFileName
                     );
@@ -40,9 +53,8 @@ namespace MadsKristensen.EditorExtensions
 
             Logger.Log(message);
 
-            return resultSource;
+            return newResult;
         }
-
 
         private async Task<string> UpdateSourceMapUrls(string content, string compiledFileName, string mapFileName)
         {
@@ -54,7 +66,8 @@ namespace MadsKristensen.EditorExtensions
             if (updatedFileContent == null)
                 return content;
 
-            await FileHelpers.WriteAllTextRetry(mapFileName, updatedFileContent);
+            if (!ReferenceEquals(string.Intern(updatedFileContent), string.Intern(await FileHelpers.ReadAllTextRetry(mapFileName))))
+                await FileHelpers.WriteAllTextRetry(mapFileName, updatedFileContent, false);
 
             if (!GenerateSourceMap)
                 return _sourceMapInCss.Replace(content, string.Empty);
@@ -75,9 +88,14 @@ namespace MadsKristensen.EditorExtensions
 
         private async Task<string> GetUpdatedSourceMapFileContent(string cssFileName, string sourceMapFileName)
         {
+            string jsonString = await ReadMapFile(sourceMapFileName);
+
+            if (string.IsNullOrEmpty(jsonString))
+                return null;
+
             // Read JSON map file and deserialize.
 
-            JObject jsonSourceMap = JObject.Parse(await ReadMapFile(sourceMapFileName));
+            JObject jsonSourceMap = JObject.Parse(jsonString);
 
             if (jsonSourceMap == null)
                 return null;

@@ -48,8 +48,17 @@ namespace MadsKristensen.EditorExtensions
                     continue;
 
                 string folder = ProjectHelpers.GetRootFolder(project);
+
+                if (string.IsNullOrEmpty(folder))
+                    continue;
+
                 Func<string, bool, Task> bundleFunc = new BundleFilesMenu().UpdateBundleAsync;
                 Func<string, bool, Task> spriteFunc = new SpriteImageMenu().UpdateSpriteAsync;
+
+                BundleFileObserver observer = new BundleFileObserver();
+
+                observer.WatchFutureFiles(folder, "*.bundle", async (s) => { await BundleGenerator.WatchFiles(await BundleDocument.FromFile(s), bundleFunc); });
+                observer.WatchFutureFiles(folder, "*.sprite", async (s) => { await SpriteGenerator.WatchFiles(await SpriteDocument.FromFile(s), spriteFunc); });
 
                 foreach (string file in Directory.EnumerateFiles(folder, "*.*", SearchOption.AllDirectories)
                                        .Where(s => s.EndsWith(".bundle") || s.EndsWith(".sprite")))
@@ -58,9 +67,9 @@ namespace MadsKristensen.EditorExtensions
                         continue;
 
                     if (file.EndsWith(".bundle", StringComparison.OrdinalIgnoreCase))
-                        await BundleGenerator.WatchFiles(BundleDocument.FromFile(file), bundleFunc);
+                        await BundleGenerator.WatchFiles(await BundleDocument.FromFile(file), bundleFunc);
                     else
-                        await SpriteGenerator.WatchFiles(SpriteDocument.FromFile(file), spriteFunc);
+                        await SpriteGenerator.WatchFiles(await SpriteDocument.FromFile(file), spriteFunc);
                 }
             }
         }

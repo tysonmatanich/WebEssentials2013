@@ -6,6 +6,7 @@ namespace MadsKristensen.EditorExtensions
     static class CommandGuids
     {
         public const string guidEditorExtensionsPkgString = "5fb7364d-2e8c-44a4-95eb-2a382e30fec8";
+        public const string guidEditorExtensionsPkgString2 = "5fb7364d-2e8c-44a4-95eb-2a382e30fec9";
         public const string guidEditorExtensionsCmdSetString = "e396b698-e00e-444b-9f5f-3dcb1ef74e41";
         public const string guidCssCmdSetString = "e396b698-e00e-444b-9f5f-3dcb1ef74e50";
         public const string guidCssIntellisensCmdSetString = "e396b698-e00e-444b-9f5f-3dcb1ef74e51";
@@ -46,6 +47,7 @@ namespace MadsKristensen.EditorExtensions
         MinifyJs = 0x1052,
         MinifyHtml = 0x1058,
         MinifySelection = 0x1053,
+        UnMinifySelection = 0x1059,
 
         SelectBrowsers = 0x1055,
     }

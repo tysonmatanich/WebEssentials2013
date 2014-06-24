@@ -18,30 +18,33 @@ namespace MadsKristensen.EditorExtensions.Html
     {
         public IHtmlSmartTag TryCreateSmartTag(ITextView textView, ITextBuffer textBuffer, ElementNode element, AttributeNode attribute, int caretPosition, HtmlPositionType positionType)
         {
-            if (element.Children.Count > 0)
-            {
-                return new HtmlRemoveParentSmartTag(textView, textBuffer, element);
-            }
+            if (element.InnerRange == null || element.GetText(element.InnerRange).Trim().Length == 0)
+                return null;
 
-            return null;
+            string displayText = element.Children.Count == 0 ? "Remove HTML tag" : "Remove and keep children";
+
+            return new HtmlRemoveParentSmartTag(textView, textBuffer, element, displayText);
         }
     }
 
     internal class HtmlRemoveParentSmartTag : HtmlSmartTag
     {
-        public HtmlRemoveParentSmartTag(ITextView textView, ITextBuffer textBuffer, ElementNode element)
+        private string _displayText;
+        public HtmlRemoveParentSmartTag(ITextView textView, ITextBuffer textBuffer, ElementNode element, string displayText)
             : base(textView, textBuffer, element, HtmlSmartTagPosition.StartTag)
-        { }
+        {
+            _displayText = displayText;
+        }
 
         protected override IEnumerable<ISmartTagAction> GetSmartTagActions(ITrackingSpan span)
         {
-            yield return new RemoveParentSmartTagAction(this);
+            yield return new RemoveParentSmartTagAction(this, _displayText);
         }
 
         class RemoveParentSmartTagAction : HtmlSmartTagAction
         {
-            public RemoveParentSmartTagAction(HtmlSmartTag htmlSmartTag) :
-                base(htmlSmartTag, "Remove and keep children")
+            public RemoveParentSmartTagAction(HtmlSmartTag htmlSmartTag, string displayText) :
+                base(htmlSmartTag, displayText)
             { }
 
             public override void Invoke()
@@ -54,14 +57,14 @@ namespace MadsKristensen.EditorExtensions.Html
                 int start = element.Start;
                 int length = content.Length;
 
-                using (EditorExtensionsPackage.UndoContext((this.DisplayText)))
+                using (WebEssentialsPackage.UndoContext((this.DisplayText)))
                 {
                     textBuffer.Replace(new Span(element.Start, element.OuterRange.Length), content);
 
                     SnapshotSpan span = new SnapshotSpan(view.TextBuffer.CurrentSnapshot, start, length);
 
                     view.Selection.Select(span, false);
-                    EditorExtensionsPackage.ExecuteCommand("Edit.FormatSelection");
+                    WebEssentialsPackage.ExecuteCommand("Edit.FormatSelection");
                     view.Caret.MoveTo(new SnapshotPoint(view.TextBuffer.CurrentSnapshot, start));
                     view.Selection.Clear();
                 }

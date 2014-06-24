@@ -7,19 +7,18 @@ using EnvDTE80;
 using Microsoft.VisualBasic;
 using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.TextManager.Interop;
-using Microsoft.Web.Editor.EditorHelpers;
 
-namespace MadsKristensen.EditorExtensions.Css
+namespace MadsKristensen.EditorExtensions
 {
-    internal class CssExtractToFile : CommandTargetBase<ExtractCommandId>
+    internal class ExtractToFile : CommandTargetBase<ExtractCommandId>
     {
         private DTE2 _dte;
         private List<string> _possible = new List<string>() { ".CSS", ".LESS", ".JS", ".TS" };
 
-        public CssExtractToFile(IVsTextView adapter, IWpfTextView textView)
+        public ExtractToFile(IVsTextView adapter, IWpfTextView textView)
             : base(adapter, textView, ExtractCommandId.ExtractSelection)
         {
-            _dte = EditorExtensionsPackage.DTE;
+            _dte = WebEssentialsPackage.DTE;
         }
 
         protected override bool Execute(ExtractCommandId commandId, uint nCmdexecopt, IntPtr pvaIn, IntPtr pvaOut)
@@ -46,7 +45,7 @@ namespace MadsKristensen.EditorExtensions.Css
 
                 if (!File.Exists(fileName))
                 {
-                    using (EditorExtensionsPackage.UndoContext("Extract to file..."))
+                    using (WebEssentialsPackage.UndoContext("Extract to file..."))
                     {
                         using (StreamWriter writer = new StreamWriter(fileName, false, new UTF8Encoding(true)))
                         {
@@ -69,9 +68,7 @@ namespace MadsKristensen.EditorExtensions.Css
 
         private static bool IsValidTextBuffer(IWpfTextView view)
         {
-            return (ProjectionBufferHelper.MapToBuffer(view, "css", view.Caret.Position.BufferPosition)
-                ?? ProjectionBufferHelper.MapToBuffer(view, "javascript", view.Caret.Position.BufferPosition)
-                ) != null;
+            return view.GetSelectedSpan(c => c.IsOfType("CSS") || c.IsOfType("JavaScript")) != null;
         }
 
         protected override bool IsEnabled()

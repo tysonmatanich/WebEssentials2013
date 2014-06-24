@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.ComponentModel.Composition;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -13,7 +12,7 @@ using Microsoft.VisualStudio.Utilities;
 
 namespace MadsKristensen.EditorExtensions.Css
 {
-    [Export(typeof(IDropHandlerProvider))]
+    //[Export(typeof(IDropHandlerProvider))] // Updated 3 includes this functionality
     [DropFormat("FileDrop")]
     [DropFormat("CF_VSSTGPROJECTITEMS")]
     [Name("FontDropHandler")]
@@ -77,7 +76,7 @@ namespace MadsKristensen.EditorExtensions.Css
             {
                 string file = files.ElementAt(i);
                 string extension = Path.GetExtension(file).ToLowerInvariant();
-                string reference = FileHelpers.RelativePath(EditorExtensionsPackage.DTE.ActiveDocument.FullName, file);
+                string reference = FileHelpers.RelativePath(WebEssentialsPackage.DTE.ActiveDocument.FullName, file);
 
                 if (reference.StartsWith("http://localhost:", StringComparison.OrdinalIgnoreCase))
                 {

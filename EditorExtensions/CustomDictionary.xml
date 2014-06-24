@@ -67,6 +67,8 @@
       <Word>tt</Word>
       <Word>Ls</Word>
       <Word>Lsc</Word>
+      <Word>Autoprefix</Word>
+      <Word>Autoprefixer</Word>
     </Recognized>
     <DiscreteExceptions>
       <Term>CoffeeScript</Term>
@@ -84,7 +86,9 @@
   <Acronyms>
     <CasingExceptions>
       <Acronym>XHTML</Acronym>
+      <Acronym>JSON</Acronym>
       <Acronym>JSONLD</Acronym>
+      <Acronym>BOM</Acronym>
     </CasingExceptions>
   </Acronyms>
 </Dictionary>

@@ -327,14 +327,14 @@
         </Strings>
       </Button>
 
-      <Button guid="guidCssCmdSet" id="cmdidCssSortProperties" priority="0x0103" type="Button">
+      <!--<Button guid="guidCssCmdSet" id="cmdidCssSortProperties" priority="0x0103" type="Button">
         <Parent guid="guidCssCmdSet" id="CssSubMenuGroup" />
         <Icon guid="guidNumbers" id="pic4"/>
         <CommandFlag>DynamicVisibility</CommandFlag>
         <Strings>
           <ButtonText>Sort All Properties</ButtonText>
         </Strings>
-      </Button>
+      </Button>-->
 
       <Button guid="guidMinifyCmdSet" id="cmdMinifySelection" priority="0x0104" type="Button">
         <Parent guid="guidCssCmdSet" id="CssMinifyMenuGroup" />
@@ -343,6 +343,15 @@
         <Strings>
           <CommandName>Minify Selection</CommandName>
           <ButtonText>Minify selection</ButtonText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidMinifyCmdSet" id="cmdUnMinifySelection" priority="0x0104" type="Button">
+        <Parent guid="guidCssCmdSet" id="CssMinifyMenuGroup" />
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <CommandName>UnMinifySelection</CommandName>
+          <ButtonText>Un-Minify document</ButtonText>
         </Strings>
       </Button>
 
@@ -904,6 +913,7 @@
       <IDSymbol name="cmdMinifyCss" value="0x1051" />
       <IDSymbol name="cmdMinifyJs" value="0x1052" />
       <IDSymbol name="cmdMinifySelection" value="0x1053" />
+      <IDSymbol name="cmdUnMinifySelection" value="0x1059" />
       <IDSymbol name="cmdSelectBrowsers" value="0x1055" />
       <IDSymbol name="cmdMinifyHtml" value="0x1058" />
     </GuidSymbol>

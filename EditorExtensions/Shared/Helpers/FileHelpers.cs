@@ -40,18 +40,25 @@ namespace MadsKristensen.EditorExtensions
         {
             return view.BufferGraph.MapDownToInsertionPoint(view.Caret.Position.BufferPosition, PointTrackingMode.Positive, ts => contentTypeFilter(ts.ContentType));
         }
-        ///<summary>Gets the first currently selected span within a specific buffer type, or null if there is no selection or if the selection is in a different buffer.</summary>
+
+        ///<summary>
+        ///  Gets a pair of first currently selected (projection) span
+        ///  and its underlying mapped span with desired content-type selected
+        ///  by the predicate within a specific buffer type, or null if there
+        ///  is no selection or if the selection is in a different buffer.
+        ///</summary>
         ///<param name="view">The TextView containing the selection</param>
-        ///<param name="contentTypeFilter">The ContentType to filter the selection by.</param>        
-        public static SnapshotSpan? GetSelectedSpan(this ITextView view, Func<IContentType, bool> contentTypeFilter)
+        ///<param name="contentTypeFilter">The ContentType to filter the selection by.</param>
+        ///<returns>Pair of projection span and the mapped span.</returns>
+        public static Tuple<SnapshotSpan, SnapshotSpan> GetSelectedSpan(this ITextView view, Func<IContentType, bool> contentTypeFilter)
         {
             return view.Selection.SelectedSpans.SelectMany(span =>
-                view.BufferGraph.MapDownToFirstMatch(
-                    span,
-                    SpanTrackingMode.EdgePositive,
-                    ts => contentTypeFilter(ts.ContentType)
-                ), (s, c) => (SnapshotSpan?)s
-            ).FirstOrDefault();
+                       view.BufferGraph.MapDownToFirstMatch(
+                           span,
+                           SpanTrackingMode.EdgePositive,
+                           ts => contentTypeFilter(ts.ContentType)
+                       ).Select(snapshot => new Tuple<SnapshotSpan, SnapshotSpan>(span, snapshot))
+                   ).FirstOrDefault();
         }
 
         public static void GzipFile(string sourcePath)
@@ -73,12 +80,12 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                IVsUIShellOpenDocument3 openDoc3 = EditorExtensionsPackage.GetGlobalService<SVsUIShellOpenDocument>() as IVsUIShellOpenDocument3;
+                IVsUIShellOpenDocument3 openDoc3 = WebEssentialsPackage.GetGlobalService<SVsUIShellOpenDocument>() as IVsUIShellOpenDocument3;
 
                 Guid reason = VSConstants.NewDocumentStateReason.Navigation;
                 newDocumentStateContext = openDoc3.SetNewDocumentState((uint)__VSNEWDOCUMENTSTATE.NDS_Provisional, ref reason);
 
-                EditorExtensionsPackage.DTE.ItemOperations.OpenFile(file);
+                WebEssentialsPackage.DTE.ItemOperations.OpenFile(file);
             }
             finally
             {
@@ -89,7 +96,7 @@ namespace MadsKristensen.EditorExtensions
 
         public static string ShowDialog(string extension, string fileName = "file.")
         {
-            var initialPath = Path.GetDirectoryName(EditorExtensionsPackage.DTE.ActiveDocument.FullName);
+            var initialPath = Path.GetDirectoryName(WebEssentialsPackage.DTE.ActiveDocument.FullName);
 
             using (var dialog = new SaveFileDialog())
             {
@@ -267,7 +274,7 @@ namespace MadsKristensen.EditorExtensions
 
         public static void SearchFiles(string term, string fileTypes)
         {
-            Find2 find = (Find2)EditorExtensionsPackage.DTE.Find;
+            Find2 find = (Find2)WebEssentialsPackage.DTE.Find;
             string types = find.FilesOfType;
             bool matchCase = find.MatchCase;
             bool matchWord = find.MatchWholeWord;
@@ -293,7 +300,7 @@ namespace MadsKristensen.EditorExtensions
 
         /// <summary>
         /// Opens a text file,
-        /// tries reading file 5 times before throwing IO Exception,
+        /// tries reading file 500 times before throwing IO Exception,
         /// and then closes the file.
         /// </summary>
         /// <param name="fileName">The file to open for reading.</param>
@@ -304,8 +311,8 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                return await Task.FromResult<string>(File.ReadAllText(fileName))
-                            .ExecuteRetryableTaskAsync<string>(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
+                return await new Lazy<Task<string>>(() => Task.FromResult<string>(File.ReadAllText(fileName)), true).Value
+                                .ExecuteRetryableTaskAsync<string>(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
             }
             catch (IOException)
             {
@@ -316,7 +323,7 @@ namespace MadsKristensen.EditorExtensions
         }
 
         /// <summary>
-        /// Tries reading the lines of a file 5 times before throwing IO Exception.
+        /// Tries reading the lines of a file 500 times before throwing IO Exception.
         /// </summary>
         /// <param name="fileName">The file to open for reading.</param>
         /// <returns>Task which ultimately returns all lines of the file, or the lines that are the result of a query.</returns>
@@ -326,8 +333,8 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                return await Task.FromResult<IEnumerable<string>>(File.ReadLines(fileName))
-                            .ExecuteRetryableTaskAsync<IEnumerable<string>>(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
+                return await new Lazy<Task<IEnumerable<string>>>(() => Task.FromResult<IEnumerable<string>>(File.ReadLines(fileName)), true).Value
+                                .ExecuteRetryableTaskAsync<IEnumerable<string>>(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
             }
             catch (IOException)
             {
@@ -339,7 +346,7 @@ namespace MadsKristensen.EditorExtensions
 
         /// <summary>
         /// Opens a text file,
-        /// tries reading file into a byte array 5 times before throwing IO Exception,
+        /// tries reading file into a byte array 500 times before throwing IO Exception,
         /// and then closes the file.
         /// </summary>
         /// <param name="fileName">The file to open for reading.</param>
@@ -350,7 +357,7 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                return await Task.FromResult<byte[]>(File.ReadAllBytes(fileName))
+                return await new Lazy<Task<byte[]>>(() => Task.FromResult<byte[]>(File.ReadAllBytes(fileName))).Value
                             .ExecuteRetryableTaskAsync<byte[]>(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
             }
             catch (IOException)
@@ -364,19 +371,18 @@ namespace MadsKristensen.EditorExtensions
         /// <summary>
         /// Creates a new file, writes the specified string to the file, and then closes
         /// the file. If the target file already exists, it is overwritten. If the target
-        /// file is in use, try 5 times before throwing IO Exception.
+        /// file is in use, try 500 times before throwing IO Exception.
         /// </summary>
         /// <param name="fileName">The file to open for reading.</param>
         /// <param name="contents">The string to write to the file.</param>
-        public async static Task WriteAllTextRetry(string fileName, string contents)
+        public async static Task WriteAllTextRetry(string fileName, string contents, bool withBOM = true)
         {
             int retryCount = 500;
-            UTF8Encoding utf8Encoding = new UTF8Encoding(false);
 
             try
             {
-                await Task.Run(() => File.WriteAllText(fileName, contents, utf8Encoding))
-                     .ExecuteRetryableTaskAsync(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
+                await new Lazy<Task>(() => Task.Run(() => File.WriteAllText(fileName, contents, new UTF8Encoding(withBOM)))).Value
+                         .ExecuteRetryableTaskAsync(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
             }
             catch (IOException)
             {
@@ -387,7 +393,7 @@ namespace MadsKristensen.EditorExtensions
         /// <summary>
         /// Creates a new file, writes the specified byte array to the file, and then closes
         /// the file. If the target file already exists, it is overwritten. If the target
-        /// file is in use, try 5 times before throwing IO Exception.
+        /// file is in use, try 500 times before throwing IO Exception.
         /// </summary>
         /// <param name="fileName">The file to open for reading.</param>
         /// <param name="value">The bytes to write to the file.</param>
@@ -397,8 +403,8 @@ namespace MadsKristensen.EditorExtensions
 
             try
             {
-                await Task.Run(() => File.WriteAllBytes(fileName, value))
-                     .ExecuteRetryableTaskAsync(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
+                await new Lazy<Task>(() => Task.Run(() => File.WriteAllBytes(fileName, value))).Value
+                         .ExecuteRetryableTaskAsync(PolicyFactory.GetPolicy(new FileTransientErrorDetectionStrategy(), retryCount));
             }
             catch (IOException)
             {

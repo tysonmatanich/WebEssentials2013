@@ -21,7 +21,7 @@ namespace MadsKristensen.EditorExtensions.Images
         public SpriteImageMenu()
         {
             // Used by the IWpfTextViewCreationListener
-            _dte = EditorExtensionsPackage.DTE;
+            _dte = WebEssentialsPackage.DTE;
         }
 
         public SpriteImageMenu(DTE2 dte, OleMenuCommandService mcs)
@@ -79,6 +79,9 @@ namespace MadsKristensen.EditorExtensions.Images
 
                 string folder = ProjectHelpers.GetRootFolder(project);
 
+                if (string.IsNullOrEmpty(folder))
+                    continue;
+
                 SpriteImageMenu menu = new SpriteImageMenu();
 
                 foreach (string file in Directory.EnumerateFiles(folder, "*.sprite", SearchOption.AllDirectories))
@@ -98,7 +101,7 @@ namespace MadsKristensen.EditorExtensions.Images
 
             try
             {
-                SpriteDocument doc = SpriteDocument.FromFile(spriteFileName);
+                SpriteDocument doc = await SpriteDocument.FromFile(spriteFileName);
 
                 if (!isBuild || doc.RunOnBuild)
                     await GenerateAsync(doc, true);
@@ -120,6 +123,9 @@ namespace MadsKristensen.EditorExtensions.Images
         {
             _dte.StatusBar.Text = "Generating sprite...";
 
+            if (!hasUpdated)
+                ProjectHelpers.AddFileToActiveProject(sprite.FileName);
+
             //Default file name is the sprite name with specified file extension.
             string imageFile = Path.ChangeExtension(sprite.FileName, sprite.FileExtension);
 
@@ -127,9 +133,8 @@ namespace MadsKristensen.EditorExtensions.Images
 
             if (!hasUpdated)
             {
-                ProjectHelpers.AddFileToActiveProject(sprite.FileName);
                 ProjectHelpers.AddFileToProject(sprite.FileName, imageFile);
-                EditorExtensionsPackage.DTE.ItemOperations.OpenFile(sprite.FileName);
+                WebEssentialsPackage.DTE.ItemOperations.OpenFile(sprite.FileName);
             }
 
             await Export(fragments, imageFile, sprite);

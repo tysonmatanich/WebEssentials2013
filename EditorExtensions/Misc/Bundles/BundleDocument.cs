@@ -46,11 +46,13 @@ namespace MadsKristensen.EditorExtensions
             OutputDirectory = settings.OutputDirectory;
         }
 
-        public async Task WriteBundleRecipe()
+        public async Task<XDocument> WriteBundleRecipe()
         {
             string root = ProjectHelpers.GetRootFolder();
             XmlWriterSettings settings = new XmlWriterSettings() { Indent = true };
             XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
+
+            ProjectHelpers.CheckOutFileFromSourceControl(FileName);
 
             using (XmlWriter writer = await Task.Run(() => XmlWriter.Create(FileName, settings)))
             {
@@ -78,10 +80,17 @@ namespace MadsKristensen.EditorExtensions
                     );
 
                 doc.Save(writer);
+
+                return doc;
             }
         }
 
-        public static BundleDocument FromFile(string fileName)
+        public async Task<IBundleDocument> LoadFromFile(string fileName)
+        {
+            return await BundleDocument.FromFile(fileName);
+        }
+
+        public static async Task<BundleDocument> FromFile(string fileName)
         {
             var extension = Path.GetExtension(fileName).TrimStart('.').ToLowerInvariant();
             string root = ProjectHelpers.GetProjectFolder(fileName);
@@ -92,9 +101,11 @@ namespace MadsKristensen.EditorExtensions
 
             XDocument doc = null;
 
+            string contents = await FileHelpers.ReadAllTextRetry(fileName);
+
             try
             {
-                doc = XDocument.Load(fileName);
+                doc = XDocument.Parse(contents);
             }
             catch (XmlException)
             {
@@ -102,7 +113,7 @@ namespace MadsKristensen.EditorExtensions
             }
 
             // Migrate old bundles
-            doc = MigrateBundle(doc, fileName, root, folder);
+            doc = await MigrateBundle(doc, fileName, root, folder);
 
             if (doc == null)
                 return null;
@@ -138,7 +149,7 @@ namespace MadsKristensen.EditorExtensions
             return bundle;
         }
 
-        private static XDocument MigrateBundle(XDocument doc, string fileName, string root, string folder)
+        private static async Task<XDocument> MigrateBundle(XDocument doc, string fileName, string root, string folder)
         {
             string[] attrNames = new[] { "runOnBuild", "minify", "output" };
             XElement bundle = doc.Descendants("bundle").FirstOrDefault();
@@ -158,18 +169,9 @@ namespace MadsKristensen.EditorExtensions
                 newDoc.RunOnBuild = bundle.Attribute("runOnBuild").Value.Equals("true", StringComparison.OrdinalIgnoreCase);
 
             if (attributes.Contains("minify"))
-                newDoc.RunOnBuild = bundle.Attribute("minify").Value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                newDoc.Minified = bundle.Attribute("minify").Value.Equals("true", StringComparison.OrdinalIgnoreCase);
 
-            newDoc.WriteBundleRecipe().DoNotWait("Migrating bundle to new schema.");
-
-            try
-            {
-                return XDocument.Load(fileName);
-            }
-            catch (XmlException)
-            {
-                return null;
-            }
+            return await newDoc.WriteBundleRecipe();
         }
     }
 }

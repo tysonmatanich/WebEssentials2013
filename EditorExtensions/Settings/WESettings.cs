@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using ConfOxide;
 using MarkdownSharp;
 using Microsoft.VisualStudio.Shell;
+using WebMarkupMin.Core;
 
 namespace MadsKristensen.EditorExtensions.Settings
 {
@@ -205,10 +206,17 @@ namespace MadsKristensen.EditorExtensions.Settings
         [DefaultValue(true)]
         public bool EnableEnterFormat { get; set; }
 
+        [Category("Minification")]
         [DisplayName("Minify files on save")]
         [Description("Update any .min.html file when saving the corresponding .html file. To create a .min.html file, right-click a .html file.")]
         [DefaultValue(false)]
         public bool AutoMinify { get; set; }
+
+        [Category("Minification")]
+        [DisplayName("Minification Mode")]
+        [Description("Sets the mode of how the HTML minifier should minify")]
+        [DefaultValue(HtmlAttributeQuotesRemovalMode.KeepQuotes)]
+        public HtmlAttributeQuotesRemovalMode MinificationMode { get; set; }
 
         [Category("Minification")]
         [DisplayName("Create gzipped files")]
@@ -246,7 +254,7 @@ namespace MadsKristensen.EditorExtensions.Settings
         [Category("Bundle")]
         [DisplayName("Minify files on making bundle")]
         [Description("Make minified version of the file when bundle is generated. The minified file would be updated if the auto-minfied option is enabled.")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         public bool MakeMinified { get; set; }
 
         [Category("Bundle")]
@@ -282,7 +290,7 @@ namespace MadsKristensen.EditorExtensions.Settings
         [Category("Minification")]
         [DisplayName("Minify files on save")]
         [Description("Update any .min.js file when saving the corresponding .js file. To create a .min.js file, right-click a .js file.")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         public bool AutoMinify { get; set; }
 
         [Category("Minification")]
@@ -309,7 +317,7 @@ namespace MadsKristensen.EditorExtensions.Settings
         [Category("Bundle")]
         [DisplayName("Minify files on making bundle")]
         [Description("Make minified version of the file when bundle is generated. The minified file would be updated if the auto-minfied option is enabled.")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         public bool MakeMinified { get; set; }
 
         [Category("Bundle")]
@@ -327,13 +335,27 @@ namespace MadsKristensen.EditorExtensions.Settings
         #endregion
     }
 
-    public sealed class CssSettings : SettingsBase<CssSettings>, IMinifierSettings, IBundleSettings
+    public sealed class CssSettings : SettingsBase<CssSettings>, IMinifierSettings, IAutoprefixerSettings, IBundleSettings
     {
+        #region Autoprefixer
+        [Category("Autoprefixer")]
+        [DisplayName("Enable Autoprefixer")]
+        [Description("Parse CSS and add vendor prefixes to CSS rules using values from caniuse.com")]
+        [DefaultValue(false)]
+        public bool Autoprefix { get; set; }
+
+        [Category("Autoprefixer")]
+        [DisplayName("Targeted browsers")]
+        [Description("Specify the browsers to target. See http://github.com/ai/autoprefixer#browsers")]
+        [DefaultValue(null)]
+        public string AutoprefixerBrowsers { get; set; }
+        #endregion
+
         #region Minification
         [Category("Minification")]
         [DisplayName("Minify files on save")]
         [Description("Update any .min.css file when saving the corresponding .css file. To create a .min.css file, right-click a .css file. This also applies to compiled LESS and SASS files.")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         public bool AutoMinify { get; set; }
 
         [Category("Minification")]
@@ -407,7 +429,7 @@ namespace MadsKristensen.EditorExtensions.Settings
         [Category("Bundle")]
         [DisplayName("Minify files on making bundle")]
         [Description("Make minified version of the file when bundle is generated. The minified file would be updated if the auto-minfied option is enabled.")]
-        [DefaultValue(false)]
+        [DefaultValue(true)]
         public bool MakeMinified { get; set; }
 
         [Category("Bundle")]
@@ -473,12 +495,6 @@ namespace MadsKristensen.EditorExtensions.Settings
         [Description("Don't save separate unminified compiler output. This option has no effect when Minify On Save is disabled for the output format.")]
         [DefaultValue(false)]
         public bool MinifyInPlace { get; set; }
-
-        [Category("Compilation")]
-        [DisplayName("Strict Math")]
-        [Description("With this option turned off, LESS will try and process all maths in your CSS.")]
-        [DefaultValue(false)]
-        public bool StrictMath { get; set; }
     }
 
     public abstract class ChainableCompilationSettings<T> : CompilationSettings<T>, IChainableCompilerSettings where T : ChainableCompilationSettings<T>
@@ -503,9 +519,38 @@ namespace MadsKristensen.EditorExtensions.Settings
         }
     }
 
-    public sealed class LessSettings : ChainableCompilationSettings<LessSettings> { }
+    public sealed class LessSettings : ChainableCompilationSettings<LessSettings>
+    {
+        [Category("Compilation")]
+        [DisplayName("Strict Math")]
+        [Description("With this option turned off, LESS will try and process all maths in your CSS.")]
+        [DefaultValue(false)]
+        public bool StrictMath { get; set; }
+    }
 
-    public sealed class ScssSettings : ChainableCompilationSettings<ScssSettings> { }
+    public sealed class ScssSettings : ChainableCompilationSettings<ScssSettings>
+    {
+
+        public enum OutputFormat
+        {
+            Expanded,
+            Nested,
+            Compact,
+            Compressed
+        }
+
+        [Category("Compilation")]
+        [DisplayName("Output Style")]
+        [Description("CSS output style. See libsass documentation for more details.")]
+        [DefaultValue(0)]
+        public OutputFormat OutputStyle { get; set; }
+
+        [Category("Compilation")]
+        [DisplayName("Number Precision")]
+        [Description("Used to determine how many digits after the decimal will be allowed.")]
+        [DefaultValue(5)]
+        public int NumberPrecision { get; set; }
+    }
 
     public sealed class CoffeeScriptSettings : CompilationSettings<CoffeeScriptSettings>, ILinterSettings
     {
@@ -655,6 +700,12 @@ namespace MadsKristensen.EditorExtensions.Settings
     {
         bool AutoMinify { get; set; }
         bool GzipMinifiedFiles { get; }
+    }
+
+    public interface IAutoprefixerSettings
+    {
+        bool Autoprefix { get; set; }
+        string AutoprefixerBrowsers { get; }
     }
 
     public enum WarningLocation

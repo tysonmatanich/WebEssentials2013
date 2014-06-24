@@ -38,7 +38,7 @@ namespace MadsKristensen.EditorExtensions.Html
                     return true;
                 }
 
-                EditorExtensionsPackage.DTE.StatusBar.Text = "Couldn't find " + _path;
+                WebEssentialsPackage.DTE.StatusBar.Text = "Couldn't find " + _path;
             }
             else if (!string.IsNullOrEmpty(_className))
             {
@@ -66,7 +66,7 @@ namespace MadsKristensen.EditorExtensions.Html
                     return true;
                 }
 
-                EditorExtensionsPackage.DTE.StatusBar.Text = "Couldn't find " + _className;
+                WebEssentialsPackage.DTE.StatusBar.Text = "Couldn't find " + _className;
             }
 
             return false;
@@ -74,54 +74,59 @@ namespace MadsKristensen.EditorExtensions.Html
 
         private string FindFile(IEnumerable<string> extensions, out int position)
         {
-            ICssParser parser = CssParserLocator.FindComponent(Mef.GetContentType(LessContentTypeDefinition.LessContentType)).CreateParser();
-
             string root = ProjectHelpers.GetProjectFolder(TextView.TextBuffer.GetFileName());
             position = -1;
+            bool isLow = false, isMedium = false;
             string result = null;
 
             foreach (string ext in extensions)
             {
-                foreach (string file in Directory.GetFiles(root, "*" + ext, SearchOption.AllDirectories))
+                ICssParser parser = CssParserLocator.FindComponent(Mef.GetContentType(ext.Trim('.'))).CreateParser();
+
+                foreach (string file in Directory.EnumerateFiles(root, "*" + ext, SearchOption.AllDirectories))
                 {
-                    if (file.EndsWith(".min" + ext, StringComparison.OrdinalIgnoreCase))
+                    if (file.EndsWith(".min" + ext, StringComparison.OrdinalIgnoreCase) ||
+                        file.Contains("node_modules") ||
+                        file.Contains("bower_components"))
                         continue;
 
                     string text = FileHelpers.ReadAllTextRetry(file).ConfigureAwait(false).GetAwaiter().GetResult();
                     int index = text.IndexOf("." + _className, StringComparison.Ordinal);
 
-                    if (index > -1)
+                    if (index == -1)
+                        continue;
+
+                    var css = parser.Parse(text, true);
+                    var visitor = new CssItemCollector<ClassSelector>(false);
+                    css.Accept(visitor);
+
+                    var selectors = visitor.Items.Where(c => c.ClassName.Text == _className);
+                    var high = selectors.FirstOrDefault(c => c.FindType<AtDirective>() == null && (c.Parent.NextSibling == null || c.Parent.NextSibling.Text == ","));
+
+                    if (high != null)
                     {
-                        var css = parser.Parse(text, true);
-                        var visitor = new CssItemCollector<ClassSelector>(false);
-                        css.Accept(visitor);
+                        position = high.Start;
+                        return file;
+                    }
 
-                        var selectors = visitor.Items.Where(c => c.ClassName.Text == _className);
-                        var high = selectors.FirstOrDefault(c => c.FindType<AtDirective>() == null && (c.Parent.NextSibling == null || c.Parent.NextSibling.Text == ","));
+                    var medium = selectors.FirstOrDefault(c => c.Parent.NextSibling == null || c.Parent.NextSibling.Text == ",");
 
-                        if (high != null)
-                        {
-                            position = high.Start;
-                            return file;
-                        }
+                    if (medium != null && !isMedium)
+                    {
+                        position = medium.Start;
+                        result = file;
+                        isMedium = true;
+                        continue;
+                    }
 
-                        var medium = selectors.FirstOrDefault(c => c.Parent.NextSibling == null || c.Parent.NextSibling.Text == ",");
+                    var low = selectors.FirstOrDefault();
 
-                        if (medium != null)
-                        {
-                            position = medium.Start;
-                            result = file;
-                            continue;
-                        }
-
-                        var low = selectors.FirstOrDefault();
-
-                        if (low != null)
-                        {
-                            position = low.Start;
-                            result = file;
-                            continue;
-                        }
+                    if (low != null && !isMedium && !isLow)
+                    {
+                        position = low.Start;
+                        result = file;
+                        isLow = true;
+                        continue;
                     }
                 }
             }
@@ -156,26 +161,9 @@ namespace MadsKristensen.EditorExtensions.Html
         private bool TryGetClassName(out string className)
         {
             int position = TextView.Caret.Position.BufferPosition.Position;
-            className = null;
+            className = HtmlHelpers.GetSinglePropertyValue(_tree, position, "class");
 
-            ElementNode element = null;
-            AttributeNode attr = null;
-
-            _tree.GetPositionElement(position, out element, out attr);
-
-            if (attr == null || attr.Name != "class")
-                return false;
-
-            int beginning = position - attr.ValueRangeUnquoted.Start;
-            int start = attr.Value.LastIndexOf(' ', beginning) + 1;
-            int length = attr.Value.IndexOf(' ', start) - start;
-
-            if (length < 0)
-                length = attr.ValueRangeUnquoted.Length - start;
-
-            className = attr.Value.Substring(start, length);
-
-            return true;
+            return !string.IsNullOrEmpty(className);
         }
 
         protected override bool IsEnabled()

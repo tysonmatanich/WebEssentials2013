@@ -72,7 +72,7 @@ namespace MadsKristensen.EditorExtensions.Css
                     string fileName = node.Attributes["fileName"].InnerText;
                     string path = Path.Combine(folder, fileName);
 
-                    await FileHelpers.WriteAllTextRetry(path, node.OuterXml);
+                    await FileHelpers.WriteAllTextRetry(path, node.OuterXml, false);
                     WriteLog("Updating module: " + fileName);
                 }
 
@@ -118,7 +118,7 @@ namespace MadsKristensen.EditorExtensions.Css
                 writer.WriteLine(DateTime.Now + " " + message);
             }
 
-            EditorExtensionsPackage.DTE.StatusBar.Text = "Web Essentials: " + message;
+            WebEssentialsPackage.DTE.StatusBar.Text = "Web Essentials: " + message;
         }
 
         private static DateTime GetLastRequestDate()

@@ -2,12 +2,10 @@
 using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using MadsKristensen.EditorExtensions.Settings;
 using Microsoft.Ajax.Utilities;
 using Microsoft.VisualStudio.Utilities;
-using WebMarkupMin.Core;
 using WebMarkupMin.Core.Minifiers;
 using WebMarkupMin.Core.Settings;
 
@@ -35,6 +33,8 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
     {
         public virtual bool GenerateSourceMap { get { return false; } }
 
+        public virtual bool SaveWithBOM { get; set; }
+
         public async virtual Task<bool> MinifyFile(string sourcePath, string targetPath)
         {
             var result = MinifyString(await FileHelpers.ReadAllTextRetry(sourcePath));
@@ -42,7 +42,7 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
             if (result != null && (!File.Exists(targetPath) || result != await FileHelpers.ReadAllTextRetry(targetPath)))
             {
                 ProjectHelpers.CheckOutFileFromSourceControl(targetPath);
-                await FileHelpers.WriteAllTextRetry(targetPath, result);
+                await FileHelpers.WriteAllTextRetry(targetPath, result, SaveWithBOM);
                 ProjectHelpers.AddFileToProject(sourcePath, targetPath);
 
                 return true;
@@ -68,8 +68,10 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
             var settings = new HtmlMinificationSettings
             {
                 RemoveOptionalEndTags = false,
-                AttributeQuotesRemovalMode = HtmlAttributeQuotesRemovalMode.KeepQuotes,
+
+                AttributeQuotesRemovalMode = WESettings.Instance.Html.MinificationMode,
                 RemoveRedundantAttributes = false,
+                //EmptyTagRenderMode = HtmlEmptyTagRenderMode.Slash,
             };
 
             var minifier = new HtmlMinifier(settings);
@@ -77,12 +79,12 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
 
             if (result.Errors.Count == 0)
             {
-                EditorExtensionsPackage.DTE.StatusBar.Text = "Web Essentials: HTML minified by " + result.Statistics.SavedInPercent + "%";
+                WebEssentialsPackage.DTE.StatusBar.Text = "Web Essentials: HTML minified by " + result.Statistics.SavedInPercent + "%";
                 return result.MinifiedContent;
             }
             else
             {
-                EditorExtensionsPackage.DTE.StatusBar.Text = "Web Essentials: Cannot minify the current selection.  See Output Window for details.";
+                WebEssentialsPackage.DTE.StatusBar.Text = "Web Essentials: Cannot minify the current selection.  See Output Window for details.";
                 Logger.ShowMessage("Cannot minify the selection:\r\n\r\n" + String.Join(Environment.NewLine, result.Errors.Select(e => e.Message)));
                 return null;
             }
@@ -93,6 +95,8 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
     [ContentType("CSS")]
     public class CssFileMinifier : InMemoryMinifier
     {
+        public override bool SaveWithBOM { get { return true; } }
+
         public override string MinifyString(string source)
         {
             Minifier minifier = new Minifier();
@@ -112,6 +116,8 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
     public class JavaScriptFileMinifier : InMemoryMinifier
     {
         public override bool GenerateSourceMap { get { return WESettings.Instance.JavaScript.GenerateSourceMaps; } }
+
+        public override bool SaveWithBOM { get { return true; } }
 
         static CodeSettings CreateSettings()
         {
@@ -146,22 +152,28 @@ namespace MadsKristensen.EditorExtensions.Optimization.Minification
 
         private async static Task<bool> MinifyFileWithSourceMap(string file, string minFile)
         {
+            bool result;
             string mapPath = minFile + ".map";
+            StringWriter writer = new StringWriter();
+
             ProjectHelpers.CheckOutFileFromSourceControl(mapPath);
 
-            using (TextWriter writer = new StreamWriter(mapPath, false, new UTF8Encoding(false)))
             using (V3SourceMap sourceMap = new V3SourceMap(writer))
             {
                 var settings = CreateSettings();
+
                 settings.SymbolsMap = sourceMap;
                 sourceMap.StartPackage(minFile, mapPath);
 
                 // This fails when debugger is attached. Bug raised with Ron Logan
-                bool result = await MinifyFile(file, minFile, settings);
-                ProjectHelpers.AddFileToProject(minFile, mapPath);
-
-                return result;
+                result = await MinifyFile(file, minFile, settings);
             }
+
+            await FileHelpers.WriteAllTextRetry(mapPath, writer.ToString(), false);
+
+            ProjectHelpers.AddFileToProject(minFile, mapPath);
+
+            return result;
         }
 
         private async static Task<bool> MinifyFile(string file, string minFile, CodeSettings settings)
